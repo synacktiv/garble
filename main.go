@@ -37,6 +37,7 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+	"io/ioutil"
 
 	"github.com/rogpeppe/go-internal/cache"
 	"golang.org/x/exp/maps"
@@ -50,6 +51,8 @@ import (
 	"mvdan.cc/garble/internal/literals"
 )
 
+var Wordlist []string
+
 var flagSet = flag.NewFlagSet("garble", flag.ContinueOnError)
 
 var (
@@ -57,6 +60,7 @@ var (
 	flagTiny     bool
 	flagDebug    bool
 	flagDebugDir string
+	flagWordlist string
 	flagSeed     seedFlag
 	// TODO(pagran): in the future, when control flow obfuscation will be stable migrate to flag
 	flagControlFlow = os.Getenv("GARBLE_EXPERIMENTAL_CONTROLFLOW") == "1"
@@ -67,6 +71,7 @@ func init() {
 	flagSet.BoolVar(&flagLiterals, "literals", false, "Obfuscate literals such as strings")
 	flagSet.BoolVar(&flagTiny, "tiny", false, "Optimize for binary size, losing some ability to reverse the process")
 	flagSet.BoolVar(&flagDebug, "debug", false, "Print debug logs to stderr")
+	flagSet.StringVar(&flagWordlist, "wordlist", "", "Wordlist to use for obfuscation, e.g. -wordlist=wordlist.txt")
 	flagSet.StringVar(&flagDebugDir, "debugdir", "", "Write the obfuscated source to a directory, e.g. -debugdir=out")
 	flagSet.Var(&flagSeed, "seed", "Provide a base64-encoded seed, e.g. -seed=o9WDTZ4CN4w\nFor a random seed, provide -seed=random")
 }
@@ -243,6 +248,18 @@ func main1() int {
 	if len(args) < 1 {
 		usage()
 		return 2
+	}
+
+	if flagWordlist != "" {
+		wd, err := os.Getwd()
+		if !filepath.IsAbs(flagWordlist) {
+			flagWordlist = filepath.Join(wd, flagWordlist)
+		}
+		data, err := ioutil.ReadFile(flagWordlist)
+		if err != nil {
+			log.Fatalf("failed to read wordlist: %v", err)
+		}
+		Wordlist = strings.Split(string(data), "\n")
 	}
 
 	// If a random seed was used, the user won't be able to reproduce the

@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"crypto/sha256"
+	"hash/fnv"
 	"encoding/base64"
 	"encoding/binary"
 	"fmt"
@@ -18,7 +19,18 @@ import (
 	"mvdan.cc/garble/internal/literals"
 )
 
+// Global variables for tracking assigned replacements and used words.
+var Assigned = make(map[string]string)
+var Used = make(map[string]bool)
+
 const buildIDSeparator = "/"
+
+func fnvHash(salt []byte, name string) uint64 {
+	hasher := fnv.New64a()
+	hasher.Write(salt)
+	hasher.Write([]byte(name))
+	return hasher.Sum64()
+}
 
 // splitActionID returns the action ID half of a build ID, the first hash.
 func splitActionID(buildID string) string {
@@ -157,6 +169,10 @@ func appendFlags(w io.Writer, forBuildHash bool) {
 	if flagSeed.present() {
 		io.WriteString(w, " -seed=")
 		io.WriteString(w, flagSeed.String())
+	}
+	if flagWordlist != "" {
+		io.WriteString(w, " -wordlist=")
+		io.WriteString(w, flagWordlist)
 	}
 	if flagControlFlow && forBuildHash {
 		io.WriteString(w, " -ctrlflow")
@@ -363,53 +379,74 @@ func hashWithCustomSalt(salt []byte, name string) string {
 		panic("hashWithCustomSalt: empty name")
 	}
 
-	hasher.Reset()
-	hasher.Write(salt)
-	hasher.Write(flagSeed.bytes)
-	io.WriteString(hasher, name)
-	sum := hasher.Sum(sumBuffer[:0])
+	var output []byte
 
-	// The byte after neededSumBytes is never used as part of the name,
-	// but it is still deterministic and hard to predict,
-	// so it provides us with useful randomness between 0 and 255.
-	// We want the number to be between 0 and hashLenthRange-1 as well,
-	// so we use a remainder operation.
-	hashLengthRandomness := sum[neededSumBytes] % ((maxHashLength - minHashLength) + 1)
-	hashLength := minHashLength + hashLengthRandomness
+	if len(Wordlist) == 0 {
+		hasher.Reset()
+		hasher.Write(salt)
+		hasher.Write(flagSeed.bytes)
+		io.WriteString(hasher, name)
+		sum := hasher.Sum(sumBuffer[:0])
 
-	nameBase64.Encode(b64NameBuffer[:], sum[:neededSumBytes])
-	b64Name := b64NameBuffer[:hashLength]
+		// The byte after neededSumBytes is never used as part of the name,
+		// but it is still deterministic and hard to predict,
+		// so it provides us with useful randomness between 0 and 255.
+		// We want the number to be between 0 and hashLenthRange-1 as well,
+		// so we use a remainder operation.
+		hashLengthRandomness := sum[neededSumBytes] % ((maxHashLength - minHashLength) + 1)
+		hashLength := minHashLength + hashLengthRandomness
+
+		nameBase64.Encode(b64NameBuffer[:], sum[:neededSumBytes])
+		output = b64NameBuffer[:hashLength]
+
+	}	else{
+		// Determine the number of words you want to use
+		numWords := 3
+
+		// Get fnv hash value from salt and name
+		hashValue := fnvHash(salt, name)
+
+		// Select words from the wordlist based on the hash value
+		selectedWords := make([]string, numWords)
+		for i := 0; i < numWords; i++ {
+			// Use parts of the hash to index into the wordlist
+			index := int((hashValue >> (i * 16)) & 0xFFFF) % len(Wordlist)
+			selectedWords[i] = strings.Title(strings.ToLower(Wordlist[index]))
+		}
+		selectedWords[0] = strings.ToLower(selectedWords[0])
+		output = []byte(strings.Join(selectedWords, ""))
+	}
 
 	// Even if we are hashing a package path, which is not an identifier,
 	// we still want the result to be a valid identifier,
 	// since we'll use it as the package name too.
-	if isDigit(b64Name[0]) {
+	if isDigit(output[0]) {
 		// Turn "3foo" into "Dfoo".
 		// Similar to toLower, since uppercase letters go after digits
 		// in the ASCII table.
-		b64Name[0] += 'A' - '0'
+		output[0] += 'A' - '0'
 	}
-	for i, b := range b64Name {
+	for i, b := range output {
 		if b == '-' { // URL encoding uses dashes, which aren't valid
-			b64Name[i] = 'a'
+		output[i] = 'a'
 		}
 	}
 	// Valid identifiers should stay exported or unexported.
 	if token.IsIdentifier(name) {
 		if token.IsExported(name) {
-			if b64Name[0] == '_' {
+			if output[0] == '_' {
 				// Turn "_foo" into "Zfoo".
-				b64Name[0] = 'Z'
-			} else if isLower(b64Name[0]) {
+				output[0] = 'Z'
+			} else if isLower(output[0]) {
 				// Turn "afoo" into "Afoo".
-				b64Name[0] = toUpper(b64Name[0])
+				output[0] = toUpper(output[0])
 			}
 		} else {
-			if isUpper(b64Name[0]) {
+			if isUpper(output[0]) {
 				// Turn "Afoo" into "afoo".
-				b64Name[0] = toLower(b64Name[0])
+				output[0] = toLower(output[0])
 			}
 		}
 	}
-	return string(b64Name)
+	return string(output)
 }

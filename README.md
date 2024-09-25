@@ -30,8 +30,8 @@ The tool wraps calls to the Go compiler and linker to transform the Go build, in
 order to:
 
 * Replace as many useful identifiers as possible with short base64 hashes
-* Replace package paths with short base64 hashes
-* Replace filenames and position information with short base64 hashes
+* Replace package paths with short base64 hashes or [words](#wordlist)
+* Replace filenames and position information with short base64 hashes or [words](#wordlist)
 * Remove all [build](https://go.dev/pkg/runtime/#Version) and [module](https://go.dev/pkg/runtime/debug/#ReadBuildInfo) information
 * Strip debugging information and symbol tables via `-ldflags="-w -s"`
 * [Obfuscate literals](#literal-obfuscation), if the `-literals` flag is given
@@ -186,6 +186,8 @@ to document the current shortcomings of this tool.
 
 * Garble requires `git` to patch the linker. That can be avoided once go-gitdiff
   supports [non-strict patches](https://github.com/bluekeyes/go-gitdiff/issues/30).
+
+* Wordlist mode can sometimes crash when the wordlist is too small since it creates collisions between names.
 
 ### Contributing
 
