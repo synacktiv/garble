@@ -16,7 +16,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"mvdan.cc/garble/internal/literals"
+	"github.com/synacktiv/garble/internal/literals"
 )
 
 // Global variables for tracking assigned replacements and used words.

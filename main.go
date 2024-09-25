@@ -45,10 +45,10 @@ import (
 	"golang.org/x/mod/module"
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/ssa"
-	"mvdan.cc/garble/internal/ctrlflow"
+	"github.com/synacktiv/garble/internal/ctrlflow"
 
-	"mvdan.cc/garble/internal/linker"
-	"mvdan.cc/garble/internal/literals"
+	"github.com/synacktiv/internal/linker"
+	"github.com/synacktiv/internal/literals"
 )
 
 var Wordlist []string
