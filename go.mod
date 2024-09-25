@@ -1,4 +1,4 @@
-module mvdan.cc/garble
+module github.com/synacktiv/garble
 
 go 1.22
 
